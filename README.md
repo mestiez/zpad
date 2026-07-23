@@ -22,11 +22,13 @@ local binary path.
 
 ## Usage
 
-Draw on the window that opens with LMB.
-
-Pan with MMB.
-
-Q or Escape to quit.
+|      Input | Action           |
+|-----------:|:-----------------|
+|      `LMB` | Draw             |
+|      `RMB` | Erase            |
+|      `MMB` | Pan              |
+|        `G` | Grid mode (hold) |
+| `Q`, `Esc` | Quit             |
 
 ## Known issues and limitations
 
@@ -41,3 +43,14 @@ Most of these stem from the fact that this program was made entirely for my pers
 - You can only draw in one colour
 - If your window manager doesn't support alt resizing, it's probably impossible to resize the window
 
+## Future
+
+These are things I would like to implement but probably won't, unless I discover that I really REALLY need them at some
+point.
+
+- Brush size
+- Colours / dithered shading
+- Zoom
+- Save/load
+- Copy/paste
+- Undo/redo
