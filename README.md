@@ -17,7 +17,7 @@ Run `cargo install --git https://github.com/mestiez/zpad`
 ## Building
 
 Run `cargo build -r` in the project folder.
-The output binary will be at `target/release/zview`. You can move it to your
+The output binary will be at `target/release/zpad`. You can move it to your
 local binary path.
 
 ## Usage
