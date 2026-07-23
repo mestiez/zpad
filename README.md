@@ -1,3 +1,5 @@
+![screenshot](screenshot.png)
+
 # zpad
 
 Scratchpad for Linux desktops. Intended to be opened via shortcut and closed soon after.
