@@ -21,7 +21,7 @@ struct Chunk {
 fn main() {
     let (mut rl, thread) = raylib::init()
         .size(1024, 1024)
-        .title("Hello, World")
+        .title(env!("CARGO_PKG_NAME"))
         .undecorated()
         .resizable()
         .build();
