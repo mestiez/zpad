@@ -30,6 +30,7 @@ fn main() {
     let mut pan = Vector2::new(0.0, 0.0);
     let mut last_m_x: i32 = -1;
     let mut last_m_y: i32 = -1;
+    let mut has_last = false;
 
     let mut grid_opacity = 0.0;
 
@@ -63,15 +64,15 @@ fn main() {
         };
 
         if rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_MIDDLE) {
-            if last_m_x >= 0 && last_m_y >= 0 {
+            if has_last {
                 pan.x += (m_x - last_m_x) as f32;
                 pan.y += (m_y - last_m_y) as f32;
             }
 
             last_m_x = m_x;
             last_m_y = m_y;
+            has_last = true;
         } else if left || right {
-
             let value = if left { u8::MAX } else { 0 };
 
             chunks_to_update.insert(put_pixel_global(
@@ -83,7 +84,7 @@ fn main() {
                 value,
             ));
 
-            if last_m_x >= 0 && last_m_y >= 0 {
+            if has_last {
                 let dda = DDA::new(
                     c_snap(last_m_x - pan.x as i32),
                     c_snap(last_m_y - pan.y as i32),
@@ -104,6 +105,7 @@ fn main() {
 
             last_m_x = m_x;
             last_m_y = m_y;
+            has_last = true;
 
             for key in chunks_to_update.iter() {
                 if let Some(chunk) = chunks.get_mut(&key) {
@@ -113,8 +115,7 @@ fn main() {
             }
             chunks_to_update.clear();
         } else {
-            last_m_x = -1;
-            last_m_y = -1;
+            has_last = false;
         }
 
         let mut d = rl.begin_drawing(&thread);
