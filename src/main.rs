@@ -12,11 +12,19 @@ const SCALE: i32 = 4;
 const GRID_INTERVAL: i32 = CHUNK_RESOLUTION as i32 / 4;
 
 struct Chunk {
-    pub key: i32,
-    pub x: i32,
-    pub y: i32,
+    pub c_x: i32,
+    pub c_y: i32,
     pub buffer: Box<[u8; 4 * CHUNK_RESOLUTION * CHUNK_RESOLUTION]>,
     pub texture: Texture2D,
+}
+
+impl Chunk {
+    pub fn x(&self) -> i32 {
+        self.c_x * CHUNK_SIZE
+    }
+    pub fn y(&self) -> i32 {
+        self.c_y * CHUNK_SIZE
+    }
 }
 
 fn main() {
@@ -34,8 +42,8 @@ fn main() {
 
     let mut grid_opacity = 0.0;
 
-    let mut chunks: HashMap<i32, Chunk> = HashMap::new();
-    let mut chunks_to_update: HashSet<i32> = HashSet::new();
+    let mut chunks: HashMap<(i32, i32), Chunk> = HashMap::new();
+    let mut chunks_to_update: HashSet<(i32, i32)> = HashSet::new();
 
     while !rl.window_should_close() {
         if rl.is_key_down(KeyboardKey::KEY_Q) {
@@ -57,7 +65,7 @@ fn main() {
 
         let c_snap = |x: i32| -> i32 {
             if do_snap {
-                isnap_round(x, GRID_INTERVAL)
+                snap_round(x, GRID_INTERVAL)
             } else {
                 x
             }
@@ -122,7 +130,7 @@ fn main() {
 
         d.clear_background(Color::BLACK);
         for chunk in chunks.values_mut() {
-            let screen_pos = Vector2::new(pan.x + chunk.x as f32, pan.y + chunk.y as f32);
+            let screen_pos = Vector2::new(pan.x + chunk.x() as f32, pan.y + chunk.y() as f32);
 
             if screen_pos.x > -CHUNK_SIZE as f32
                 && screen_pos.y > -CHUNK_SIZE as f32
@@ -186,18 +194,19 @@ fn main() {
     fn put_pixel_global(
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
-        chunks: &mut HashMap<i32, Chunk>,
+        chunks: &mut HashMap<(i32, i32), Chunk>,
         x: i32,
         y: i32,
         value: u8,
-    ) -> i32 {
+    ) -> (i32, i32) {
         if let Some(chunk) = get_chunk_at(rl, &thread, chunks, x, y) {
+            let pos = (chunk.x(), chunk.y());
             let buffer = chunk.buffer.deref_mut();
-            put_pixel(buffer, x - chunk.x, y - chunk.y, value);
-            return chunk.key;
+            put_pixel(buffer, x - pos.0, y - pos.1, value);
+            return (chunk.c_x, chunk.c_y);
         }
 
-        -1
+        (-1, -1)
     }
 
     fn put_pixel(buffer: &mut [u8], x: i32, y: i32, value: u8) {
@@ -220,16 +229,16 @@ fn main() {
     fn get_chunk_at<'a>(
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
-        chunks: &'a mut HashMap<i32, Chunk>,
+        chunks: &'a mut HashMap<(i32, i32), Chunk>,
         x: i32,
         y: i32,
     ) -> Option<&'a mut Chunk> {
-        let x = isnap(x, CHUNK_SIZE);
-        let y = isnap(y, CHUNK_SIZE);
+        let x = (x as f32).div_euclid(CHUNK_SIZE as f32) as i32;
+        let y = (y as f32).div_euclid(CHUNK_SIZE as f32) as i32;
+        let p = (x, y);
 
-        let key = x * 100000 + y;
-        if chunks.contains_key(&key) {
-            return chunks.get_mut(&key);
+        if chunks.contains_key(&p) {
+            return chunks.get_mut(&p);
         } else {
             let i = Image::gen_image_color(
                 CHUNK_RESOLUTION as i32,
@@ -238,14 +247,13 @@ fn main() {
             );
             if let Ok(texture) = rl.load_texture_from_image(thread, &i) {
                 let c = Chunk {
-                    key,
-                    x,
-                    y,
+                    c_x: x,
+                    c_y: y,
                     buffer: Box::new([0u8; CHUNK_RESOLUTION * CHUNK_RESOLUTION * 4]),
                     texture,
                 };
 
-                chunks.insert(key, c);
+                chunks.insert(p, c);
             }
         }
 
@@ -253,18 +261,6 @@ fn main() {
     }
 }
 
-fn snap(value: f32, interval: f32) -> f32 {
-    (value / interval).floor() * interval
-}
-
-fn isnap(value: i32, interval: i32) -> i32 {
-    ((value as f32 / interval as f32).floor() * interval as f32) as i32
-}
-
-fn snap_round(value: f32, interval: f32) -> f32 {
-    (value / interval).round() * interval
-}
-
-fn isnap_round(value: i32, interval: i32) -> i32 {
+fn snap_round(value: i32, interval: i32) -> i32 {
     ((value as f32 / interval as f32).round() * interval as f32) as i32
 }
