@@ -1,34 +1,21 @@
+mod chunk;
 mod dda;
 
+use crate::chunk::Chunk;
 use crate::dda::DDA;
 use raylib::prelude::*;
 use std::collections::{HashMap, HashSet};
-use std::ops::{Deref, DerefMut};
 
 const MAIN_COLOR: u32 = 0x96_00_FF_FF;
 const CHUNK_RESOLUTION: usize = 128;
+const COMPONENTS_PER_PIXEL: usize = 1;
 const CHUNK_SIZE: i32 = CHUNK_RESOLUTION as i32 * SCALE;
+const BUFFER_SIZE: usize = COMPONENTS_PER_PIXEL * CHUNK_RESOLUTION * CHUNK_RESOLUTION;
 const SCALE: i32 = 4;
-const GRID_INTERVAL: i32 = CHUNK_RESOLUTION as i32 / 4;
-
-struct Chunk {
-    pub c_x: i32,
-    pub c_y: i32,
-    pub buffer: Box<[u8; 4 * CHUNK_RESOLUTION * CHUNK_RESOLUTION]>,
-    pub texture: Texture2D,
-}
-
-impl Chunk {
-    pub fn x(&self) -> i32 {
-        self.c_x * CHUNK_SIZE
-    }
-    pub fn y(&self) -> i32 {
-        self.c_y * CHUNK_SIZE
-    }
-}
+const GRID_INTERVAL: i32 = 32;
 
 fn main() {
-    let (mut rl, thread) = raylib::init()
+    let (mut rl, thread) = init()
         .size(1024, 1024)
         .title(env!("CARGO_PKG_NAME"))
         .undecorated()
@@ -117,8 +104,7 @@ fn main() {
 
             for key in chunks_to_update.iter() {
                 if let Some(chunk) = chunks.get_mut(&key) {
-                    let buffer = chunk.buffer.deref();
-                    chunk.texture.update_texture(buffer).ok();
+                    chunk.update_texture();
                 }
             }
             chunks_to_update.clear();
@@ -190,75 +176,74 @@ fn main() {
             d.draw_rectangle(0, 0, w, h, c.alpha(f * f * f * f * 0.5));
         }
     }
+}
 
-    fn put_pixel_global(
-        rl: &mut RaylibHandle,
-        thread: &RaylibThread,
-        chunks: &mut HashMap<(i32, i32), Chunk>,
-        x: i32,
-        y: i32,
-        value: u8,
-    ) -> (i32, i32) {
-        if let Some(chunk) = get_chunk_at(rl, &thread, chunks, x, y) {
-            let pos = (chunk.x(), chunk.y());
-            let buffer = chunk.buffer.deref_mut();
-            put_pixel(buffer, x - pos.0, y - pos.1, value);
-            return (chunk.c_x, chunk.c_y);
+fn put_pixel_global(
+    rl: &mut RaylibHandle,
+    thread: &RaylibThread,
+    chunks: &mut HashMap<(i32, i32), Chunk>,
+    x: i32,
+    y: i32,
+    value: u8,
+) -> (i32, i32) {
+    if let Some(chunk) = get_chunk_at(rl, &thread, chunks, x, y) {
+        let pos = (chunk.x(), chunk.y());
+        put_pixel(chunk.get_buffer_mut(), x - pos.0, y - pos.1, value);
+        return (chunk.c_x, chunk.c_y);
+    }
+
+    (-1, -1)
+}
+
+fn put_pixel(buffer: &mut [u8], x: i32, y: i32, value: u8) {
+    if x >= CHUNK_SIZE || y >= CHUNK_SIZE || x < 0 || y < 0 {
+        return;
+    }
+
+    let index = canvas_to_index(x, y);
+    for i in 0..COMPONENTS_PER_PIXEL {
+        buffer[index + i] = value
+    }
+}
+
+fn canvas_to_index(x: i32, y: i32) -> usize {
+    ((x / SCALE + y / SCALE * (CHUNK_RESOLUTION as i32)) * COMPONENTS_PER_PIXEL as i32) as usize
+}
+
+fn get_chunk_at<'a>(
+    rl: &mut RaylibHandle,
+    thread: &RaylibThread,
+    chunks: &'a mut HashMap<(i32, i32), Chunk>,
+    x: i32,
+    y: i32,
+) -> Option<&'a mut Chunk> {
+    let x = (x as f32).div_euclid(CHUNK_SIZE as f32) as i32;
+    let y = (y as f32).div_euclid(CHUNK_SIZE as f32) as i32;
+    let p = (x, y);
+
+    if chunks.contains_key(&p) {
+        return chunks.get_mut(&p);
+    } else {
+        let mut i = Image::gen_image_color(
+            CHUNK_RESOLUTION as i32,
+            CHUNK_RESOLUTION as i32,
+            Color::BLACK,
+        );
+        i.set_format(PixelFormat::PIXELFORMAT_UNCOMPRESSED_GRAYSCALE);
+
+        if let Ok(texture) = rl.load_texture_from_image(thread, &i) {
+            let c = Chunk {
+                c_x: x,
+                c_y: y,
+                buffer: Box::new([0u8; BUFFER_SIZE]),
+                texture,
+            };
+
+            chunks.insert(p, c);
         }
-
-        (-1, -1)
     }
 
-    fn put_pixel(buffer: &mut [u8], x: i32, y: i32, value: u8) {
-        if x >= CHUNK_SIZE || y >= CHUNK_SIZE || x < 0 || y < 0 {
-            return;
-        }
-
-        let index = canvas_to_index(x, y);
-        // RGBA
-        buffer[index + 0] = value;
-        buffer[index + 1] = value;
-        buffer[index + 2] = value;
-        buffer[index + 3] = u8::MAX;
-    }
-
-    fn canvas_to_index(x: i32, y: i32) -> usize {
-        ((x / SCALE + y / SCALE * (CHUNK_RESOLUTION as i32)) * 4) as usize
-    }
-
-    fn get_chunk_at<'a>(
-        rl: &mut RaylibHandle,
-        thread: &RaylibThread,
-        chunks: &'a mut HashMap<(i32, i32), Chunk>,
-        x: i32,
-        y: i32,
-    ) -> Option<&'a mut Chunk> {
-        let x = (x as f32).div_euclid(CHUNK_SIZE as f32) as i32;
-        let y = (y as f32).div_euclid(CHUNK_SIZE as f32) as i32;
-        let p = (x, y);
-
-        if chunks.contains_key(&p) {
-            return chunks.get_mut(&p);
-        } else {
-            let i = Image::gen_image_color(
-                CHUNK_RESOLUTION as i32,
-                CHUNK_RESOLUTION as i32,
-                Color::BLACK,
-            );
-            if let Ok(texture) = rl.load_texture_from_image(thread, &i) {
-                let c = Chunk {
-                    c_x: x,
-                    c_y: y,
-                    buffer: Box::new([0u8; CHUNK_RESOLUTION * CHUNK_RESOLUTION * 4]),
-                    texture,
-                };
-
-                chunks.insert(p, c);
-            }
-        }
-
-        None
-    }
+    None
 }
 
 fn snap_round(value: i32, interval: i32) -> i32 {
