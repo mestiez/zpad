@@ -58,6 +58,10 @@ fn main() {
             }
         };
 
+        if rl.is_key_pressed(KeyboardKey::KEY_F){
+            rl.toggle_fullscreen();
+        }
+
         if rl.is_mouse_button_down(MouseButton::MOUSE_BUTTON_MIDDLE) {
             if has_last {
                 pan.x += (m_x - last_m_x) as f32;
